@@ -53,32 +53,46 @@ def playwright_login(session: "AccountSession"):
         page.screenshot(path="/tmp/checkpoint.png")
         logger.info("Screenshot saved to /tmp/checkpoint.png")
 
-        # Try to find and fill verification code input
-        code_input = page.locator('input#input__email_verification_pin').first
-        if code_input.count() == 0:
-            code_input = page.locator('input[name="pin"]').first
-        if code_input.count() == 0:
-            code_input = page.locator('input[type="text"]').first
+        # Try multiple selectors for the verification code input
+        code_input = None
+        for selector in [
+            'input#input__email_verification_pin',
+            'input[name="pin"]',
+            'input[name="verificationCode"]',
+            'input[type="text"]',
+            'input[type="number"]',
+        ]:
+            loc = page.locator(selector)
+            if loc.count() > 0:
+                code_input = loc.first
+                break
 
-        if code_input.count() > 0:
+        if code_input is not None:
             logger.info(colored("LinkedIn sent a verification code to your email.", "yellow"))
-            code = input("Enter the verification code from your email: ").strip()
+            code = input(">>> Enter the verification code from your email: ").strip()
             code_input.fill(code)
-            submit_btn = page.locator('button[type="submit"]').first
-            if submit_btn.count() > 0:
-                submit_btn.click()
+            page.wait_for_timeout(1000)
+            submit = page.locator('button[type="submit"], button#btn-submit')
+            if submit.count() > 0:
+                submit.first.click()
                 page.wait_for_load_state("load")
-                session.wait()
+                page.wait_for_timeout(3000)
+        else:
+            logger.info("No code input found — this may be a CAPTCHA or different challenge.")
+            logger.info("Saving page HTML for debugging...")
+            page.screenshot(path="/tmp/checkpoint_page.png")
+            with open("/tmp/checkpoint_page.html", "w") as f:
+                f.write(page.content())
 
-        # Wait for redirect to feed
-        try:
-            page.wait_for_url(lambda url: "/feed" in url, timeout=60_000)
+        # Check if we made it to feed
+        current = page.url
+        if "/feed" in current:
             logger.info(colored("Checkpoint passed!", "green", attrs=["bold"]))
-        except Exception:
+        else:
             page.screenshot(path="/tmp/checkpoint_failed.png")
             raise RuntimeError(
-                "Checkpoint not resolved. Screenshot saved to /tmp/checkpoint_failed.png. "
-                "Try logging into LinkedIn from your browser first to approve this server's IP, "
+                "Checkpoint not resolved. Screenshots saved to /tmp/checkpoint*.png. "
+                "Try logging into LinkedIn from your normal browser to approve this server's IP, "
                 "then restart the daemon."
             )
     elif "/feed" not in current:
