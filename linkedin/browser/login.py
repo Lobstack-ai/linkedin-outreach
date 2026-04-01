@@ -42,13 +42,47 @@ def playwright_login(session: "AccountSession"):
     human_type(page.locator(SELECTORS["password"]), lp.linkedin_password)
     session.wait()
 
-    goto_page(
-        session,
-        action=lambda: page.locator(SELECTORS["submit"]).click(),
-        expected_url_pattern="/feed",
-        timeout=BROWSER_LOGIN_TIMEOUT_MS,
-        error_message="Login failed – no redirect to feed",
-    )
+    page.locator(SELECTORS["submit"]).click()
+    page.wait_for_load_state("load")
+    session.wait()
+
+    # Handle LinkedIn security checkpoint
+    current = page.url
+    if "/checkpoint" in current or "/challenge" in current:
+        logger.info(colored("LinkedIn security checkpoint detected!", "yellow", attrs=["bold"]))
+        page.screenshot(path="/tmp/checkpoint.png")
+        logger.info("Screenshot saved to /tmp/checkpoint.png")
+
+        # Try to find and fill verification code input
+        code_input = page.locator('input#input__email_verification_pin').first
+        if code_input.count() == 0:
+            code_input = page.locator('input[name="pin"]').first
+        if code_input.count() == 0:
+            code_input = page.locator('input[type="text"]').first
+
+        if code_input.count() > 0:
+            logger.info(colored("LinkedIn sent a verification code to your email.", "yellow"))
+            code = input("Enter the verification code from your email: ").strip()
+            code_input.fill(code)
+            submit_btn = page.locator('button[type="submit"]').first
+            if submit_btn.count() > 0:
+                submit_btn.click()
+                page.wait_for_load_state("load")
+                session.wait()
+
+        # Wait for redirect to feed
+        try:
+            page.wait_for_url(lambda url: "/feed" in url, timeout=60_000)
+            logger.info(colored("Checkpoint passed!", "green", attrs=["bold"]))
+        except Exception:
+            page.screenshot(path="/tmp/checkpoint_failed.png")
+            raise RuntimeError(
+                "Checkpoint not resolved. Screenshot saved to /tmp/checkpoint_failed.png. "
+                "Try logging into LinkedIn from your browser first to approve this server's IP, "
+                "then restart the daemon."
+            )
+    elif "/feed" not in current:
+        raise RuntimeError(f"Login failed – unexpected URL: {current}")
 
 
 def launch_browser(storage_state=None):
