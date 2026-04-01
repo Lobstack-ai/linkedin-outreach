@@ -74,6 +74,14 @@ CAMPAIGN_CONFIG = {
 }
 
 # ----------------------------------------------------------------------
+# Proxy config (residential proxy to avoid LinkedIn CAPTCHA)
+# Format: http://user:pass@host:port or socks5://user:pass@host:port
+# ----------------------------------------------------------------------
+PROXY_SERVER = os.getenv("PROXY_SERVER")
+PROXY_USERNAME = os.getenv("PROXY_USERNAME")
+PROXY_PASSWORD = os.getenv("PROXY_PASSWORD")
+
+# ----------------------------------------------------------------------
 # Global OpenAI / LLM config
 # ----------------------------------------------------------------------
 LLM_API_KEY = os.getenv("LLM_API_KEY")

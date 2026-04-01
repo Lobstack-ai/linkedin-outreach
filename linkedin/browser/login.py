@@ -11,6 +11,9 @@ from linkedin.conf import (
     BROWSER_HEADLESS,
     BROWSER_LOGIN_TIMEOUT_MS,
     BROWSER_SLOW_MO,
+    PROXY_PASSWORD,
+    PROXY_SERVER,
+    PROXY_USERNAME,
 )
 
 logger = logging.getLogger(__name__)
@@ -102,7 +105,22 @@ def playwright_login(session: "AccountSession"):
 def launch_browser(storage_state=None):
     logger.debug("Launching Playwright")
     playwright = sync_playwright().start()
-    browser = playwright.chromium.launch(headless=BROWSER_HEADLESS, slow_mo=BROWSER_SLOW_MO)
+
+    launch_kwargs = {
+        "headless": BROWSER_HEADLESS,
+        "slow_mo": BROWSER_SLOW_MO,
+    }
+
+    if PROXY_SERVER:
+        proxy_config = {"server": PROXY_SERVER}
+        if PROXY_USERNAME:
+            proxy_config["username"] = PROXY_USERNAME
+        if PROXY_PASSWORD:
+            proxy_config["password"] = PROXY_PASSWORD
+        launch_kwargs["proxy"] = proxy_config
+        logger.info(colored("Using proxy: %s", "cyan"), PROXY_SERVER)
+
+    browser = playwright.chromium.launch(**launch_kwargs)
     context = browser.new_context(storage_state=storage_state)
     context.set_default_timeout(BROWSER_DEFAULT_TIMEOUT_MS)
     Stealth().apply_stealth_sync(context)
